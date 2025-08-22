@@ -1,0 +1,69 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    monitor: 'orbstack-monitor'
+
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Redis/FalkorDB Exporter
+  - job_name: 'falkordb'
+    static_configs:
+      - targets: ['redis-exporter:9121']
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'falkordb'
+
+  # Netdata (already running on host)
+  - job_name: 'netdata'
+    metrics_path: '/api/v1/allmetrics'
+    params:
+      format: ['prometheus']
+    static_configs:
+      - targets: ['host.docker.internal:19999']
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'netdata'
+
+  # ClickHouse/Langfuse metrics
+  - job_name: 'clickhouse'
+    static_configs:
+      - targets: ['clickhouse-exporter:9116']
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'langfuse-clickhouse'
+
+  # Grafana Alloy self-monitoring
+  - job_name: 'alloy'
+    static_configs:
+      - targets: ['alloy:12345']
+
+  # Docker containers via Docker SD
+  - job_name: 'docker'
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 30s
+    relabel_configs:
+      # Only keep containers with prometheus.io/scrape=true label
+      - source_labels: [__meta_docker_container_label_prometheus_io_scrape]
+        regex: true
+        action: keep
+      # Use container name as instance
+      - source_labels: [__meta_docker_container_name]
+        target_label: instance
+      # Extract port from prometheus.io/port label
+      - source_labels: [__address__, __meta_docker_container_label_prometheus_io_port]
+        regex: ([^:]+):.*; (.+)
+        target_label: __address__
+        replacement: ${1}:${2}
+
+remote_write:
+  # Write to Grafana Alloy for processing
+  - url: http://alloy:9090/api/v1/write

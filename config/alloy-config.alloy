@@ -1,0 +1,161 @@
+// Grafana Alloy Configuration for OrbStack Observability
+
+// OTLP Receiver for traces and metrics
+otelcol.receiver.otlp "default" {
+  grpc {
+    endpoint = "0.0.0.0:4317"
+  }
+
+  http {
+    endpoint = "0.0.0.0:4318"
+  }
+
+  output {
+    metrics = [otelcol.processor.batch.default.input]
+    logs    = [otelcol.processor.batch.default.input]
+    traces  = [otelcol.processor.batch.default.input]
+  }
+}
+
+// Batch processor for efficiency
+otelcol.processor.batch "default" {
+  output {
+    metrics = [otelcol.exporter.prometheus.default.input]
+    logs    = [otelcol.exporter.loki.default.input]
+    traces  = [otelcol.exporter.otlp.tempo.input]
+  }
+}
+
+// Export metrics to Prometheus
+otelcol.exporter.prometheus "default" {
+  forward_to = [prometheus.remote_write.local.receiver]
+}
+
+// Export traces to Tempo
+otelcol.exporter.otlp "tempo" {
+  client {
+    endpoint = "tempo:4317"
+    tls {
+      insecure = true
+    }
+  }
+}
+
+// Export logs to Loki
+otelcol.exporter.loki "default" {
+  forward_to = [loki.write.default.receiver]
+}
+
+// Prometheus remote write to local Prometheus
+prometheus.remote_write "local" {
+  endpoint {
+    url = "http://prometheus:9090/api/v1/write"
+  }
+}
+
+// Loki write for logs
+loki.write "default" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}
+
+// Scrape Redis exporter (FalkorDB metrics)
+prometheus.scrape "falkordb" {
+  targets = [
+    {__address__ = "redis-exporter:9121", job = "falkordb"},
+  ]
+  forward_to = [prometheus.remote_write.local.receiver]
+  scrape_interval = "15s"
+}
+
+// Scrape Netdata metrics
+prometheus.scrape "netdata" {
+  targets = [
+    {__address__ = "netdata-test:19999", job = "netdata"},
+  ]
+  metrics_path = "/api/v1/allmetrics"
+  params = {
+    format = ["prometheus"],
+  }
+  forward_to = [prometheus.remote_write.local.receiver]
+  scrape_interval = "30s"
+}
+
+// Scrape ClickHouse exporter (Langfuse metrics)
+prometheus.scrape "clickhouse" {
+  targets = [
+    {__address__ = "clickhouse-exporter:9116", job = "langfuse"},
+  ]
+  forward_to = [prometheus.remote_write.local.receiver]
+  scrape_interval = "30s"
+}
+
+// Docker service discovery for container metrics
+discovery.docker "containers" {
+  host = "unix:///var/run/docker.sock"
+  refresh_interval = "30s"
+}
+
+// Process Docker discovered targets
+discovery.relabel "docker_containers" {
+  targets = discovery.docker.containers.targets
+
+  // Keep only containers with monitoring enabled
+  rule {
+    source_labels = ["__meta_docker_container_label_prometheus_io_scrape"]
+    regex = "true"
+    action = "keep"
+  }
+
+  // Set instance name from container name
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    target_label = "instance"
+  }
+
+  // Set job name from container label or default to container name
+  rule {
+    source_labels = ["__meta_docker_container_label_prometheus_io_job"]
+    target_label = "job"
+  }
+
+  // Extract metrics port from label
+  rule {
+    source_labels = ["__meta_docker_container_label_prometheus_io_port"]
+    target_label = "__tmp_port"
+  }
+
+  // Construct address from container name and port
+  rule {
+    source_labels = ["__meta_docker_container_name", "__tmp_port"]
+    separator = ":"
+    target_label = "__address__"
+    replacement = "${1}:${2}"
+  }
+}
+
+// Scrape discovered Docker containers
+prometheus.scrape "docker" {
+  targets = discovery.relabel.docker_containers.output
+  forward_to = [prometheus.remote_write.local.receiver]
+  scrape_interval = "30s"
+}
+
+// Collect logs from Docker containers
+loki.source.docker "containers" {
+  host = "unix:///var/run/docker.sock"
+  targets = discovery.docker.containers.targets
+  forward_to = [loki.write.default.receiver]
+  relabel_rules = discovery.relabel.docker_containers.rules
+}
+
+// Self-monitoring
+prometheus.exporter.self "alloy" {
+}
+
+prometheus.scrape "alloy_self" {
+  targets = prometheus.exporter.self.alloy.targets
+  forward_to = [prometheus.remote_write.local.receiver]
+  scrape_interval = "30s"
+}

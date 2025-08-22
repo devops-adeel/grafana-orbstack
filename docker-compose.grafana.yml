@@ -1,0 +1,150 @@
+version: '3.8'
+
+services:
+  # Grafana for visualization
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana-local
+    labels:
+      - dev.orbstack.domains=grafana.local
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_FEATURE_TOGGLES_ENABLE=traceToMetrics,traceToLogs
+    volumes:
+      - grafana-storage:/var/lib/grafana
+      - ./dashboards:/etc/grafana/provisioning/dashboards
+      - ./config/datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml
+    networks:
+      - observability
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Prometheus for metrics storage
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus-local
+    labels:
+      - dev.orbstack.domains=prometheus.local
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.enable-remote-write-receiver'
+      - '--enable-feature=exemplar-storage'
+      - '--storage.tsdb.retention.time=90d'
+    volumes:
+      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    networks:
+      - observability
+    restart: unless-stopped
+
+  # Tempo for distributed tracing
+  tempo:
+    image: grafana/tempo:latest
+    container_name: tempo-local
+    labels:
+      - dev.orbstack.domains=tempo.local
+    command: [ "-config.file=/etc/tempo.yaml" ]
+    volumes:
+      - ./config/tempo.yaml:/etc/tempo.yaml
+      - tempo-data:/var/tempo
+    networks:
+      - observability
+    restart: unless-stopped
+
+  # Loki for logs
+  loki:
+    image: grafana/loki:latest
+    container_name: loki-local
+    labels:
+      - dev.orbstack.domains=loki.local
+    command: -config.file=/etc/loki/local-config.yaml
+    volumes:
+      - loki-data:/loki
+    networks:
+      - observability
+    restart: unless-stopped
+
+  # Grafana Alloy for collection
+  alloy:
+    image: grafana/alloy:latest
+    container_name: grafana-alloy
+    labels:
+      - dev.orbstack.domains=alloy.local
+    ports:
+      - "4317:4317"     # OTLP gRPC for external services
+      - "4318:4318"     # OTLP HTTP for external services
+    volumes:
+      - ./config/alloy-config.alloy:/etc/alloy/config.alloy
+      - /var/run/docker.sock:/var/run/docker.sock:ro  # For Docker service discovery
+    command:
+      - run
+      - /etc/alloy/config.alloy
+      - --server.http.listen-addr=0.0.0.0:12345
+      - --storage.path=/tmp/alloy
+    environment:
+      - HOSTNAME=alloy
+    networks:
+      - observability
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+      - tempo
+      - loki
+
+  # Redis Exporter for FalkorDB
+  redis-exporter:
+    image: oliver006/redis_exporter:latest
+    container_name: redis-exporter
+    labels:
+      - dev.orbstack.domains=redis-exporter.local
+    environment:
+      - REDIS_ADDR=falkordb:6379  # FalkorDB container
+      - REDIS_EXPORTER_CHECK_KEYS=shared_knowledge_graph:*
+      - REDIS_EXPORTER_CHECK_SINGLE_KEYS=shared_knowledge_graph
+      - REDIS_EXPORTER_INCL_SYSTEM_METRICS=true
+    command:
+      - --include-system-metrics
+      - --check-keys=shared_knowledge_graph:*
+    networks:
+      - observability
+    restart: unless-stopped
+
+  # ClickHouse Exporter for Langfuse metrics
+  clickhouse-exporter:
+    image: f1yegor/clickhouse-exporter
+    container_name: clickhouse-exporter
+    labels:
+      - dev.orbstack.domains=clickhouse-exporter.local
+    environment:
+      - CLICKHOUSE_USER=clickhouse
+      - CLICKHOUSE_PASSWORD=clickhouse
+    command:
+      - -scrape_uri=http://langfuse-prod-clickhouse-1:8123/
+    networks:
+      - observability
+    restart: unless-stopped
+
+networks:
+  observability:
+    name: observability
+    driver: bridge
+
+volumes:
+  grafana-storage:
+    driver: local
+  prometheus-data:
+    driver: local
+  tempo-data:
+    driver: local
+  loki-data:
+    driver: local

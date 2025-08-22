@@ -18,7 +18,7 @@ services:
   # CRITICAL: Timeouts - reduce panel count or time range
   grafana:
     image: grafana/grafana:latest
-    container_name: grafana-local
+    container_name: grafana-main
     labels:
       - dev.orbstack.domains=grafana.local
     ports:
@@ -26,8 +26,8 @@ services:
     environment:
       - GF_SECURITY_ADMIN_USER=admin
       - GF_SECURITY_ADMIN_PASSWORD=admin
-      - GF_AUTH_ANONYMOUS_ENABLED=true
-      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      # - GF_AUTH_ANONYMOUS_ENABLED=true
+      # - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
       - GF_FEATURE_TOGGLES_ENABLE=traceToMetrics,traceToLogs
     volumes:
       - grafana-storage:/var/lib/grafana

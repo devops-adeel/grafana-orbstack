@@ -196,6 +196,26 @@ loki.source.docker "containers" {
   relabel_rules = discovery.relabel.docker_containers.rules
 }
 
+// Standalone cAdvisor for container monitoring
+// METRICS: container_* (CPU, memory, disk, network)
+// NORMAL: CPU <50%, Memory <1GB per container
+// WARNING: CPU >70% or Memory >2GB  
+// CRITICAL: CPU >90% or Memory >3GB
+// KEY METRICS:
+//   container_cpu_usage_seconds_total - CPU utilization
+//   container_memory_usage_bytes - Memory consumption
+//   container_network_receive_bytes_total - Network ingress
+//   container_network_transmit_bytes_total - Network egress
+//   container_last_seen - Container health/liveness
+prometheus.scrape "cadvisor" {
+  targets = [
+    {__address__ = "cadvisor:8080", job = "cadvisor"},
+  ]
+  forward_to = [prometheus.remote_write.local.receiver]
+  scrape_interval = "30s"
+  metrics_path = "/metrics"
+}
+
 // Self-monitoring
 // TRACKS: Alloy's own resource usage and pipeline health
 // KEY METRICS:

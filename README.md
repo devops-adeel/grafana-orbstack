@@ -1,51 +1,51 @@
-# Grafana Observability Stack for AI Agents
+# Grafana Observability Stack for AI Infrastructure
 
-Comprehensive observability platform for monitoring AI-agentic systems including GTD Coach, Langfuse, FalkorDB, and MCP servers using Grafana, Prometheus, Tempo, and Loki.
+Infrastructure observability that **complements Langfuse** for complete AI system visibility. While Langfuse tracks LLM interactions, this stack monitors the distributed systems, service mesh, and infrastructure beneath.
 
-## Quick Start
+## Why This + Langfuse = Complete Observability
+
+| Layer | Langfuse Provides | This Stack Provides |
+|-------|------------------|-------------------|
+| **LLM** | Prompts, completions, token usage | - |
+| **Application** | LLM call traces, evaluations | Service dependencies, distributed traces |
+| **Infrastructure** | - | Container metrics, network I/O, resource usage |
+| **Data** | - | GraphRAG performance, cache efficiency |
+| **Automation** | - | Backup health, git hook triggers |
+
+**Key Integration**: Both systems share trace IDs via OTLP, enabling end-to-end debugging from LLM call to infrastructure.
+
+## Quick Start (3 Commands)
 
 ```bash
-# Start the observability stack
+# 1. Start the stack
 docker compose -f docker-compose.grafana.yml up -d
 
-# Wait for services to be healthy (about 30 seconds)
-docker ps | grep grafana-orbstack
+# 2. Verify health
+curl -s http://prometheus.local:9090/api/v1/query?query=up | jq '.data.result[].metric.job'
 
-# Open Grafana dashboard
-open http://grafana.local
-# Login: admin / admin
+# 3. Open Grafana
+open http://grafana.local  # Login: admin/admin
 ```
 
-## Architecture
+## What Makes This Unique
 
-This platform provides unified observability for:
-- **AI Agents**: GTD Coach, MCP servers
-- **LLM Tracking**: Langfuse observability
-- **Graph Database**: FalkorDB (GraphRAG)
-- **Knowledge Graphs**: Graphiti-core temporal memory
-
-Data flows through:
-1. **Collection**: Grafana Alloy (OTLP receiver on ports 4317/4318)
-2. **Storage**: Prometheus (metrics), Tempo (traces), Loki (logs)
-3. **Visualization**: Grafana dashboards
+- **Service Dependency Mapping** - See what calls what in your AI architecture
+- **Distributed Transaction Tracing** - Follow requests across MCP servers, databases, and services  
+- **Memory Loop Detection** - GraphRAG-specific patterns not visible in LLM traces
+- **Infrastructure Correlation** - Link slow AI responses to resource constraints
+- **Automated Backup System** - Git-driven configuration management with health monitoring
 
 ## Documentation
 
-### 🚀 Quick Reference
-- **[User Quick Reference Cards](docs/user/QUICK-REFERENCE-CARDS.md)** - 🆕 Copy-paste solutions for critical issues
-- **[Developer Quick Reference](docs/dev/QUICK-REFERENCE-DEV.md)** - 🆕 API reference, debugging, integration patterns
+### 🚀 Getting Started
+- **[Quick Start Guide](docs/QUICK-START-COMPLEMENT.md)** - 5-minute setup with Langfuse integration
+- **[Trace Correlation](docs/dev/TRACE-CORRELATION-GUIDE.md)** - Link Langfuse and Tempo traces
+- **[MCP Instrumentation](docs/dev/MCP-INSTRUMENTATION.md)** - OpenTelemetry for MCP servers
 
-### 📖 Detailed Guides
-- **[Technical Reference](docs/dev/README.md)** - Architecture, service inventory, metrics catalog
-- **[AI Operations Guide](docs/user/AI-OPERATIONS-GUIDE.md)** - Operational patterns and debug scenarios
-- **[Troubleshooting](docs/user/TROUBLESHOOTING.md)** - Problem-solution reference with queries
-
-## Key Features
-
-- **Unified AI Operations Dashboard** - Single pane of glass for AI agent monitoring
-- **Auto-Discovery** - Service inventory updates automatically
-- **Visual Pattern Recognition** - Identify memory loops, slow responses, context loss
-- **Inline Documentation** - Operational patterns embedded in configs
+### 📚 References  
+- **[Operations Guide](docs/user/OPERATIONS.md)** - Visual patterns and troubleshooting
+- **[Integration Examples](docs/INTEGRATION-EXAMPLES.md)** - Real-world scenarios
+- **[Learn More](docs/LEARN-MORE.md)** - External resources and documentation
 
 ## Services
 

@@ -4,6 +4,29 @@ All notable changes to the Grafana Observability Stack for AI Agents will be doc
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+## [Unreleased]
+
+### 🚀 Features
+
+- *(backup)* Add three-tier backup system with SQLite snapshots and API exports
+- *(instrumentation)* Enhance MCP observability with specialized patterns
+- *(docker)* Add backup volume and enhanced monitoring configuration
+
+### 🐛 Bug Fixes
+
+- Resolve Grafana authentication and networking issues
+
+### 📚 Documentation
+
+- Add comprehensive quick reference cards for operations and development
+- Refactor for AI/MCP developers with Langfuse complementary focus
+
+### ⚙️ Miscellaneous Tasks
+
+- *(release)* Update CHANGELOG.md for v1.0.0
+- Add Claude Code configuration for AI-assisted development
+- *(git)* Exclude backup data while preserving directory structure
+- *(release)* Update CHANGELOG.md with backup and instrumentation features
 ## [1.0.0](https://github.com/devops-adeel/grafana-orbstack/compare/..v1.0.0) - 2025-08-22
 
 ### 🚀 Features

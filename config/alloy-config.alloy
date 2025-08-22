@@ -1,6 +1,20 @@
 // Grafana Alloy Configuration for OrbStack Observability
+// 
+// DATA FLOW: OTLP → Batch → Export to Storage
+// PORTS: 4317 (gRPC), 4318 (HTTP), 12345 (internal metrics)
+// 
+// OPERATIONAL PATTERNS:
+// - Normal: <100 req/s, batch size 100-500, <100MB memory
+// - Warning: >500 req/s, consider increasing batch size
+// - Critical: >1000 req/s, may need multiple Alloy instances
+//
+// DEBUG: curl http://alloy.local:12345/metrics | grep otlp
 
 // OTLP Receiver for traces and metrics
+// METRICS EMITTED:
+//   otlp_receiver_accepted_spans - Successful trace ingestion
+//   otlp_receiver_refused_spans - Failed ingestion (check logs)
+//   otlp_receiver_accepted_metric_points - Metric ingestion rate
 otelcol.receiver.otlp "default" {
   grpc {
     endpoint = "0.0.0.0:4317"
@@ -18,6 +32,9 @@ otelcol.receiver.otlp "default" {
 }
 
 // Batch processor for efficiency
+// TUNING: Increase batch size if seeing high CPU
+// Default: 100 items or 10s timeout
+// High volume: 500 items or 5s timeout
 otelcol.processor.batch "default" {
   output {
     metrics = [otelcol.exporter.prometheus.default.input]
@@ -61,6 +78,13 @@ loki.write "default" {
 }
 
 // Scrape Redis exporter (FalkorDB metrics)
+// KEY METRICS:
+//   redis_keyspace_hits_total - Cache effectiveness (target >85%)
+//   redis_memory_used_bytes - Memory consumption (warn >2GB)
+//   redis_commands_processed_total - Query load
+// NORMAL: 100-500 commands/s, cache hit >85%
+// WARNING: >1000 commands/s or cache hit <70%
+// CRITICAL: >2000 commands/s or memory >3GB
 prometheus.scrape "falkordb" {
   targets = [
     {__address__ = "redis-exporter:9121", job = "falkordb"},
@@ -69,7 +93,13 @@ prometheus.scrape "falkordb" {
   scrape_interval = "15s"
 }
 
-// Scrape Netdata metrics
+// Scrape Netdata metrics (Host system monitoring)
+// PROVIDES: CPU, memory, disk, network for macOS host
+// KEY METRICS:
+//   system_cpu_usage - Host CPU (warn >80%)
+//   system_ram_usage - Host memory pressure
+//   system_io_ops - Disk activity
+// NOTE: Requires netdata container running separately
 prometheus.scrape "netdata" {
   targets = [
     {__address__ = "netdata-test:19999", job = "netdata"},
@@ -82,7 +112,13 @@ prometheus.scrape "netdata" {
   scrape_interval = "30s"
 }
 
-// Scrape ClickHouse exporter (Langfuse metrics)
+// Scrape ClickHouse exporter (Langfuse LLM observability)
+// TRACKS: LLM token usage, trace counts, query performance
+// KEY METRICS:
+//   clickhouse_query_duration - Query latency (warn >1s)
+//   clickhouse_table_parts - Data organization
+//   clickhouse_insertions_failed - Data loss indicator
+// INTEGRATION: Correlate with mcp_tool_invocations for AI insights
 prometheus.scrape "clickhouse" {
   targets = [
     {__address__ = "clickhouse-exporter:9116", job = "langfuse"},
@@ -92,6 +128,16 @@ prometheus.scrape "clickhouse" {
 }
 
 // Docker service discovery for container metrics
+// AUTO-DISCOVERS: Containers with prometheus.io labels
+// REQUIRED LABELS:
+//   prometheus.io.scrape=true - Enable scraping
+//   prometheus.io.port=9090 - Metrics port
+//   prometheus.io.job=service-name - Job name
+// EXAMPLE: Add to your docker-compose service:
+//   labels:
+//     - prometheus.io.scrape=true
+//     - prometheus.io.port=8080
+//     - prometheus.io.job=my-api
 discovery.docker "containers" {
   host = "unix:///var/run/docker.sock"
   refresh_interval = "30s"
@@ -151,6 +197,14 @@ loki.source.docker "containers" {
 }
 
 // Self-monitoring
+// TRACKS: Alloy's own resource usage and pipeline health
+// KEY METRICS:
+//   alloy_config_load_success - Config validity
+//   alloy_component_controller_running - Pipeline status
+//   process_resident_memory_bytes - Alloy memory usage
+// NORMAL: <100MB memory, all components running
+// WARNING: >200MB memory - check for backpressure
+// CRITICAL: Components failing - check logs
 prometheus.exporter.self "alloy" {
 }
 

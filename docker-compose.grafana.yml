@@ -1,7 +1,21 @@
 version: '3.8'
 
+# Grafana Observability Stack for AI Agent Monitoring
+# Quick Start: docker compose -f docker-compose.grafana.yml up -d
+# Access: http://grafana.local (admin/admin)
+# 
+# OPERATIONAL NOTES:
+# - All services auto-restart on failure
+# - OrbStack provides *.local domains automatically
+# - Metrics retention: Prometheus 90d, Tempo 30d, Loki 3d
+# - Total memory usage should stay under 4GB normal, 8GB peak
+
 services:
   # Grafana for visualization
+  # METRICS: None (UI only)
+  # NORMAL: Dashboard loads <2s
+  # WARNING: >5s load time - check query complexity
+  # CRITICAL: Timeouts - reduce panel count or time range
   grafana:
     image: grafana/grafana:latest
     container_name: grafana-local
@@ -29,6 +43,14 @@ services:
       retries: 3
 
   # Prometheus for metrics storage
+  # METRICS: prometheus_tsdb_* (self-monitoring)
+  # NORMAL: <2GB storage, <100MB memory
+  # WARNING: >5GB storage - consider reducing retention
+  # CRITICAL: >10GB storage - urgent cleanup needed
+  # KEY QUERIES:
+  #   up - Service health checks
+  #   rate(metric_total[5m]) - Rate calculations
+  #   histogram_quantile() - Latency percentiles
   prometheus:
     image: prom/prometheus:latest
     container_name: prometheus-local
@@ -47,7 +69,12 @@ services:
       - observability
     restart: unless-stopped
 
-  # Tempo for distributed tracing
+  # Tempo for distributed tracing  
+  # METRICS: tempo_* (throughput, latency)
+  # NORMAL: <1GB storage, trace ingestion <1000/s
+  # WARNING: Trace search >5s - too many traces
+  # CRITICAL: Storage full - reduce retention
+  # INTEGRATION: Links from logs/metrics to traces via trace_id
   tempo:
     image: grafana/tempo:latest
     container_name: tempo-local
@@ -62,6 +89,11 @@ services:
     restart: unless-stopped
 
   # Loki for logs
+  # METRICS: loki_* (ingestion rate, query performance)
+  # NORMAL: <500MB storage, <1000 logs/s
+  # WARNING: Ingestion lag >30s - check pipeline
+  # CRITICAL: Queries timing out - reduce time range
+  # TIP: Use LogQL for structured queries: {job="docker"} |= "error"
   loki:
     image: grafana/loki:latest
     container_name: loki-local
@@ -75,6 +107,14 @@ services:
     restart: unless-stopped
 
   # Grafana Alloy for collection
+  # METRICS: otlp_receiver_* (request count, latency)
+  # NORMAL: <100MB memory, <1% CPU
+  # WARNING: Dropped spans/metrics - check batch size
+  # CRITICAL: Pipeline blocked - restart required
+  # PORTS:
+  #   4317: OTLP gRPC (preferred for high volume)
+  #   4318: OTLP HTTP (for browser/curl testing)
+  #   12345: Internal metrics endpoint
   alloy:
     image: grafana/alloy:latest
     container_name: grafana-alloy
@@ -102,6 +142,14 @@ services:
       - loki
 
   # Redis Exporter for FalkorDB
+  # METRICS: redis_* (memory, commands, clients)
+  # NORMAL: Cache hit rate >85%, memory <2GB
+  # WARNING: Hit rate 70-85% - cache warming needed
+  # CRITICAL: Hit rate <70% - performance degradation
+  # KEY METRICS:
+  #   redis_keyspace_hits_total - Cache effectiveness
+  #   redis_memory_used_bytes - GraphRAG memory usage
+  #   redis_commands_processed_total - Query volume
   redis-exporter:
     image: oliver006/redis_exporter:latest
     container_name: redis-exporter
@@ -120,6 +168,12 @@ services:
     restart: unless-stopped
 
   # ClickHouse Exporter for Langfuse metrics
+  # METRICS: clickhouse_* (queries, connections, memory)
+  # NORMAL: Query time <100ms, <1GB memory
+  # WARNING: Slow queries >1s - check indexes
+  # CRITICAL: Connection pool exhausted
+  # LANGFUSE TRACKING:
+  #   LLM token usage, trace counts, latency percentiles
   clickhouse-exporter:
     image: f1yegor/clickhouse-exporter
     container_name: clickhouse-exporter
@@ -134,11 +188,22 @@ services:
       - observability
     restart: unless-stopped
 
+# Networks configuration
+# The observability network allows all services to communicate
+# OrbStack automatically provides DNS resolution via container names
 networks:
   observability:
     name: observability
     driver: bridge
 
+# Volume configuration
+# IMPORTANT: These volumes persist data between container restarts
+# To completely reset: docker compose down -v
+# Size estimates (after 30 days):
+#   grafana-storage: <100MB (dashboards, settings)
+#   prometheus-data: 5-10GB (90 day retention)
+#   tempo-data: 1-3GB (30 day retention)
+#   loki-data: 500MB-1GB (3 day retention)
 volumes:
   grafana-storage:
     driver: local

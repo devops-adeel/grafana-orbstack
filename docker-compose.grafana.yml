@@ -126,6 +126,8 @@ services:
     volumes:
       - ./config/alloy-config.alloy:/etc/alloy/config.alloy
       - /var/run/docker.sock:/var/run/docker.sock:ro  # For Docker service discovery
+      - /sys:/sys:ro  # For cAdvisor to read cgroup stats
+      - /var/lib/docker:/var/lib/docker:ro  # For cAdvisor to read container info
     command:
       - run
       - /etc/alloy/config.alloy
@@ -135,6 +137,7 @@ services:
       - HOSTNAME=alloy
     networks:
       - observability
+      - langfuse-prod_default  # Cross-network attachment for Langfuse monitoring
     restart: unless-stopped
     depends_on:
       - prometheus
@@ -188,6 +191,42 @@ services:
       - observability
     restart: unless-stopped
 
+  # cAdvisor for container monitoring
+  # METRICS: container_* (CPU, memory, network, disk)
+  # NORMAL: CPU <50%, Memory <1GB per container
+  # WARNING: CPU >70% or Memory >2GB
+  # CRITICAL: CPU >90% or Memory >3GB or container restarts
+  # KEY METRICS:
+  #   container_cpu_usage_seconds_total - CPU utilization rate
+  #   container_memory_usage_bytes - Current memory usage
+  #   container_network_receive_bytes_total - Network ingress
+  #   container_network_transmit_bytes_total - Network egress
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+    container_name: cadvisor
+    labels:
+      - dev.orbstack.domains=cadvisor.local
+    privileged: true
+    devices:
+      - /dev/kmsg
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker:/var/lib/docker:ro
+      - /dev/disk:/dev/disk:ro
+    ports:
+      - "8080:8080"
+    networks:
+      - observability
+      - langfuse-prod_default  # Cross-network for Langfuse monitoring
+    restart: unless-stopped
+    command:
+      - --docker_only=true
+      - --housekeeping_interval=30s
+      - --max_housekeeping_interval=60s
+      - --storage_duration=5m0s
+
 # Networks configuration
 # The observability network allows all services to communicate
 # OrbStack automatically provides DNS resolution via container names
@@ -195,6 +234,8 @@ networks:
   observability:
     name: observability
     driver: bridge
+  langfuse-prod_default:
+    external: true  # External network from Langfuse stack
 
 # Volume configuration
 # IMPORTANT: These volumes persist data between container restarts

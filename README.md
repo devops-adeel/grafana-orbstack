@@ -31,6 +31,11 @@ Data flows through:
 
 ## Documentation
 
+### 🚀 Quick Reference
+- **[User Quick Reference Cards](docs/user/QUICK-REFERENCE-CARDS.md)** - 🆕 Copy-paste solutions for critical issues
+- **[Developer Quick Reference](docs/dev/QUICK-REFERENCE-DEV.md)** - 🆕 API reference, debugging, integration patterns
+
+### 📖 Detailed Guides
 - **[Technical Reference](docs/dev/README.md)** - Architecture, service inventory, metrics catalog
 - **[AI Operations Guide](docs/user/AI-OPERATIONS-GUIDE.md)** - Operational patterns and debug scenarios
 - **[Troubleshooting](docs/user/TROUBLESHOOTING.md)** - Problem-solution reference with queries

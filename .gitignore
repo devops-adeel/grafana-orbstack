@@ -36,3 +36,11 @@ logs/
 # Temporary files
 *.tmp
 .temp/
+
+# Backup data (preserve structure, exclude data)
+backup/snapshots/**/*.db
+backup/snapshots/**/*.db.gz
+backup/snapshots/**/*.sql
+backup/logs/*.log
+backup/exports/**/*.json
+backup/exports/**/*.yaml

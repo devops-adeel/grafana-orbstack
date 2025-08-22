@@ -1,0 +1,105 @@
+#!/bin/bash
+
+# Git pre-push hook for Grafana backup
+# Validates backup completeness before pushing to remote
+
+# Get the repository root
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+
+# Load backup configuration
+CONFIG_FILE="${REPO_ROOT}/backup/configs/backup.conf"
+if [ -f "$CONFIG_FILE" ]; then
+    source "$CONFIG_FILE"
+fi
+
+# Check if validation on push is enabled
+if [ "${TRIGGER_ON_PUSH:-true}" != "true" ]; then
+    exit 0
+fi
+
+echo "Validating backup status before push..."
+
+# Check if there are uncommitted changes in config directories
+if ! git diff --quiet HEAD -- config/ dashboards/; then
+    echo "⚠️  Warning: Uncommitted changes in configuration directories"
+    echo "Consider committing these changes:"
+    git status --short config/ dashboards/
+fi
+
+# Check SQLite backup age
+SNAPSHOT_DIR="${REPO_ROOT}/backup/snapshots/latest"
+if [ -L "$SNAPSHOT_DIR" ]; then
+    # Get the age of the latest snapshot in hours
+    if [ -e "$SNAPSHOT_DIR" ]; then
+        snapshot_age_seconds=$(($(date +%s) - $(stat -f %m "$SNAPSHOT_DIR" 2>/dev/null || stat -c %Y "$SNAPSHOT_DIR" 2>/dev/null)))
+        snapshot_age_hours=$((snapshot_age_seconds / 3600))
+        
+        if [ $snapshot_age_hours -gt 24 ]; then
+            echo "⚠️  Warning: Latest SQLite snapshot is $snapshot_age_hours hours old"
+            echo "Consider running: make backup-snapshot"
+        else
+            echo "✅ SQLite snapshot is current ($snapshot_age_hours hours old)"
+        fi
+    fi
+else
+    echo "⚠️  Warning: No SQLite snapshots found"
+fi
+
+# Validate JSON files in dashboards directory
+json_errors=0
+for file in "${REPO_ROOT}"/dashboards/*.json; do
+    if [ -f "$file" ]; then
+        if ! jq empty "$file" >/dev/null 2>&1; then
+            echo "❌ Invalid JSON in dashboard: $(basename "$file")"
+            ((json_errors++))
+        fi
+    fi
+done
+
+if [ $json_errors -gt 0 ]; then
+    echo "❌ Found $json_errors invalid JSON files. Please fix before pushing."
+    exit 1
+fi
+
+# Validate YAML files in config directory
+yaml_errors=0
+for file in "${REPO_ROOT}"/config/*.yml "${REPO_ROOT}"/config/*.yaml; do
+    if [ -f "$file" ]; then
+        # Basic YAML validation (checking if file can be parsed)
+        if ! python3 -c "import yaml; yaml.safe_load(open('$file'))" >/dev/null 2>&1; then
+            echo "❌ Invalid YAML in config: $(basename "$file")"
+            ((yaml_errors++))
+        fi
+    fi
+done
+
+if [ $yaml_errors -gt 0 ]; then
+    echo "❌ Found $yaml_errors invalid YAML files. Please fix before pushing."
+    exit 1
+fi
+
+echo "✅ Pre-push validation completed successfully"
+
+# Send metrics if enabled
+if [ "${METRICS_ENABLED:-false}" = "true" ] && [ -n "${ALLOY_OTLP_HTTP:-}" ]; then
+    timestamp=$(date +%s%N)
+    curl -s -X POST "${ALLOY_OTLP_HTTP}/v1/metrics" \
+        -H "Content-Type: application/json" \
+        -d "{
+            \"resourceMetrics\": [{
+                \"scopeMetrics\": [{
+                    \"metrics\": [{
+                        \"name\": \"grafana_backup_validation_prepush\",
+                        \"gauge\": {
+                            \"dataPoints\": [{
+                                \"timeUnixNano\": \"${timestamp}\",
+                                \"asDouble\": 1
+                            }]
+                        }
+                    }]
+                }]
+            }]
+        }" >/dev/null 2>&1 || true
+fi
+
+exit 0

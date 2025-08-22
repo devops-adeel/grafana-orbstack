@@ -1,0 +1,60 @@
+#!/bin/bash
+
+# Git post-commit hook for Grafana backup
+# Triggers backup after configuration changes are committed
+
+# Get the repository root
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+
+# Load backup configuration
+CONFIG_FILE="${REPO_ROOT}/backup/configs/backup.conf"
+if [ -f "$CONFIG_FILE" ]; then
+    source "$CONFIG_FILE"
+fi
+
+# Check if backup on commit is enabled
+if [ "${TRIGGER_ON_COMMIT:-true}" != "true" ]; then
+    exit 0
+fi
+
+# Check if the commit affects configuration files
+if git diff --name-only HEAD~1 HEAD | grep -qE "(config/|dashboards/)" 2>/dev/null; then
+    echo "Configuration changes detected, triggering backup..."
+    
+    # Create snapshot of SQLite database
+    if [ -x "${REPO_ROOT}/backup/scripts/grafana-backup.sh" ]; then
+        "${REPO_ROOT}/backup/scripts/grafana-backup.sh" --snapshot-only >/dev/null 2>&1 &
+        
+        # Export runtime configurations in background
+        if [ -x "${REPO_ROOT}/backup/scripts/export-runtime.sh" ]; then
+            "${REPO_ROOT}/backup/scripts/export-runtime.sh" >/dev/null 2>&1 &
+        fi
+        
+        echo "Backup triggered in background (check logs for details)"
+    fi
+    
+    # Send metrics if enabled
+    if [ "${METRICS_ENABLED:-false}" = "true" ] && [ -n "${ALLOY_OTLP_HTTP:-}" ]; then
+        timestamp=$(date +%s%N)
+        curl -s -X POST "${ALLOY_OTLP_HTTP}/v1/metrics" \
+            -H "Content-Type: application/json" \
+            -d "{
+                \"resourceMetrics\": [{
+                    \"scopeMetrics\": [{
+                        \"metrics\": [{
+                            \"name\": \"grafana_backup_git_hook_triggered\",
+                            \"gauge\": {
+                                \"dataPoints\": [{
+                                    \"attributes\": {
+                                        \"hook_type\": \"post-commit\"
+                                    },
+                                    \"timeUnixNano\": \"${timestamp}\",
+                                    \"asDouble\": 1
+                                }]
+                            }
+                        }]
+                    }]
+                }]
+            }" >/dev/null 2>&1 || true
+    fi
+fi

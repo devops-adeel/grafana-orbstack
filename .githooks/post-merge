@@ -1,0 +1,88 @@
+#!/bin/bash
+
+# Git post-merge hook for Grafana backup
+# Syncs runtime configuration with provisioned files after merge
+
+# Get the repository root
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+
+# Load backup configuration
+CONFIG_FILE="${REPO_ROOT}/backup/configs/backup.conf"
+if [ -f "$CONFIG_FILE" ]; then
+    source "$CONFIG_FILE"
+fi
+
+# Check if sync on merge is enabled
+if [ "${TRIGGER_ON_MERGE:-true}" != "true" ]; then
+    exit 0
+fi
+
+echo "Configuration merge detected, syncing runtime state..."
+
+# Check if configuration files were changed in the merge
+if git diff --name-only HEAD~1 HEAD | grep -qE "(config/|dashboards/)" 2>/dev/null; then
+    echo "Configuration changes detected in merge"
+    
+    # Check if Grafana container is running
+    if docker ps --format "{{.Names}}" | grep -q "${GRAFANA_CONTAINER:-grafana-main}"; then
+        echo "Reloading Grafana configuration..."
+        
+        # Reload dashboards by restarting the container (safest approach)
+        docker restart "${GRAFANA_CONTAINER:-grafana-main}" >/dev/null 2>&1
+        
+        # Wait for Grafana to be ready
+        echo "Waiting for Grafana to be ready..."
+        sleep 5
+        
+        # Verify Grafana is responding
+        max_attempts=30
+        attempt=0
+        while [ $attempt -lt $max_attempts ]; do
+            if curl -s -o /dev/null -w "%{http_code}" "${GRAFANA_HOST:-http://localhost:3001}/api/health" | grep -q "200"; then
+                echo "✅ Grafana is ready"
+                break
+            fi
+            ((attempt++))
+            sleep 1
+        done
+        
+        if [ $attempt -eq $max_attempts ]; then
+            echo "⚠️  Warning: Grafana may not be fully ready"
+        fi
+        
+        # Trigger a backup to capture the new state
+        if [ -x "${REPO_ROOT}/backup/scripts/grafana-backup.sh" ]; then
+            echo "Creating post-merge backup..."
+            "${REPO_ROOT}/backup/scripts/grafana-backup.sh" --snapshot-only >/dev/null 2>&1 &
+            echo "Backup triggered in background"
+        fi
+    else
+        echo "⚠️  Warning: Grafana container is not running"
+        echo "Run 'docker compose -f docker-compose.grafana.yml up -d' to start it"
+    fi
+    
+    # Send metrics if enabled
+    if [ "${METRICS_ENABLED:-false}" = "true" ] && [ -n "${ALLOY_OTLP_HTTP:-}" ]; then
+        timestamp=$(date +%s%N)
+        curl -s -X POST "${ALLOY_OTLP_HTTP}/v1/metrics" \
+            -H "Content-Type: application/json" \
+            -d "{
+                \"resourceMetrics\": [{
+                    \"scopeMetrics\": [{
+                        \"metrics\": [{
+                            \"name\": \"grafana_backup_git_hook_triggered\",
+                            \"gauge\": {
+                                \"dataPoints\": [{
+                                    \"attributes\": {
+                                        \"hook_type\": \"post-merge\"
+                                    },
+                                    \"timeUnixNano\": \"${timestamp}\",
+                                    \"asDouble\": 1
+                                }]
+                            }
+                        }]
+                    }]
+                }]
+            }" >/dev/null 2>&1 || true
+    fi
+fi

@@ -11,15 +11,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - *(backup)* Add three-tier backup system with SQLite snapshots and API exports
 - *(instrumentation)* Enhance MCP observability with specialized patterns
 - *(docker)* Add backup volume and enhanced monitoring configuration
+- Add 1Password secrets management for secure deployments
+- *(prometheus)* Enable admin API for zero-downtime backup snapshots
+- *(observability)* Add docker-volume-backup labels to all services
+- *(backup)* Add offen/docker-volume-backup infrastructure with segregated services
+- *(backup)* Add centralized configuration with retention policies and storage tiers
+- *(backup)* Add safe Prometheus TSDB restore script with validation
+- *(backup)* Add comprehensive backup verification and health checking
 
 ### 🐛 Bug Fixes
 
 - Resolve Grafana authentication and networking issues
 
+### 🚜 Refactor
+
+- Enable environment variable substitution for credentials
+
 ### 📚 Documentation
 
 - Add comprehensive quick reference cards for operations and development
 - Refactor for AI/MCP developers with Langfuse complementary focus
+- *(backup)* Add comprehensive backup architecture documentation and commands
 
 ### ⚙️ Miscellaneous Tasks
 

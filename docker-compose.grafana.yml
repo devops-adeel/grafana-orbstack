@@ -21,6 +21,8 @@ services:
     container_name: grafana-main
     labels:
       - dev.orbstack.domains=grafana.local
+      - docker-volume-backup.stop-during-backup=grafana-critical
+      - docker-volume-backup.archive-pre=/bin/sh -c 'grafana-cli admin export-dashboard-json > /var/lib/grafana/dashboards-export.json 2>/dev/null || true'
     ports:
       - "3001:3000"
     environment:
@@ -56,6 +58,9 @@ services:
     container_name: prometheus-local
     labels:
       - dev.orbstack.domains=prometheus.local
+      - docker-volume-backup.exec-label=prometheus-snapshot
+      - docker-volume-backup.archive-pre=/bin/sh -c 'curl -XPOST http://localhost:9090/api/v1/admin/tsdb/snapshot 2>/dev/null | jq -r .data.name > /tmp/snapshot-name.txt && cp -r /prometheus/snapshots/$(cat /tmp/snapshot-name.txt)/* /tmp/prometheus-snapshot/ 2>/dev/null && rm -rf /prometheus/snapshots/$(cat /tmp/snapshot-name.txt) && echo "Snapshot created: $(cat /tmp/snapshot-name.txt)"'
+      - docker-volume-backup.archive-post=/bin/sh -c 'rm -rf /tmp/prometheus-snapshot/* 2>/dev/null || true'
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
@@ -66,6 +71,7 @@ services:
     volumes:
       - ./config/prometheus.yml:/etc/prometheus/prometheus.yml
       - prometheus-data:/prometheus
+      - /tmp/prometheus-snapshot:/tmp/prometheus-snapshot:rw  # Temporary snapshot storage for backup
     networks:
       - observability
     restart: unless-stopped
@@ -81,6 +87,7 @@ services:
     container_name: tempo-local
     labels:
       - dev.orbstack.domains=tempo.local
+      - docker-volume-backup.stop-during-backup=tempo-loki
     command: [ "-config.file=/etc/tempo.yaml" ]
     volumes:
       - ./config/tempo.yaml:/etc/tempo.yaml
@@ -100,6 +107,7 @@ services:
     container_name: loki-local
     labels:
       - dev.orbstack.domains=loki.local
+      - docker-volume-backup.stop-during-backup=tempo-loki
     command: -config.file=/etc/loki/local-config.yaml
     volumes:
       - loki-data:/loki

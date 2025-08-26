@@ -28,6 +28,40 @@ up: ## Start the observability stack
 	@echo "  Loki:       http://loki.local"
 	@echo "  Alloy:      http://alloy.local"
 
+up-secure: ## Start stack with 1Password secrets
+	@command -v op >/dev/null 2>&1 || (echo "❌ 1Password CLI not installed. Run: brew install --cask 1password-cli" && exit 1)
+	@echo "🔐 Injecting secrets from 1Password..."
+	@op inject -i secrets/.env.1password -o .env.secrets
+	@docker compose -f docker-compose.grafana.yml --env-file .env.secrets up -d
+	@rm -f .env.secrets  # Clean up temporary file
+	@echo ""
+	@echo "✅ Secure stack started with 1Password secrets!"
+	@echo "Access points:"
+	@echo "  Grafana:    http://grafana.local (admin/<from 1Password>)"
+	@echo "  Prometheus: http://prometheus.local"
+	@echo "  Tempo:      http://tempo.local"
+	@echo "  Loki:       http://loki.local"
+	@echo "  Alloy:      http://alloy.local (OTLP auth enabled if token set)"
+
+setup-secrets: ## Initialize 1Password vault for Grafana
+	@echo "📋 Setting up 1Password vault for Grafana Observability..."
+	@echo ""
+	@echo "Run these commands in 1Password CLI or app:"
+	@echo ""
+	@echo "1. Create vault:"
+	@echo "   op vault create 'Grafana-Observability'"
+	@echo ""
+	@echo "2. Add Grafana admin password:"
+	@echo "   op item create --category=password --vault='Grafana-Observability' --title='Grafana' admin-password=<your-secure-password>"
+	@echo ""
+	@echo "3. Add ClickHouse password:"
+	@echo "   op item create --category=database --vault='Grafana-Observability' --title='ClickHouse' password=<your-secure-password>"
+	@echo ""
+	@echo "4. Add OTLP bearer token (for MCP/Langfuse):"
+	@echo "   op item create --category=password --vault='Grafana-Observability' --title='Security' otlp-bearer-token=<your-bearer-token>"
+	@echo ""
+	@echo "✅ Once complete, run: make up-secure"
+
 down: ## Stop the observability stack
 	docker compose -f docker-compose.grafana.yml down
 

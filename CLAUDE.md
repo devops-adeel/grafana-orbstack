@@ -25,6 +25,33 @@ docker logs <container-name> --tail 50
 
 # Restart specific service
 docker compose -f docker-compose.grafana.yml restart <service>
+
+# === BACKUP COMMANDS ===
+
+# Start backup services
+docker compose -f docker-compose.backup.yml --profile backup up -d
+
+# Manual backup - trigger critical backup immediately
+docker exec backup-critical backup
+
+# Manual backup - full backup of all volumes
+docker compose -f docker-compose.backup.yml run --rm backup-manual-full
+
+# Verify backup integrity and status
+./backup/scripts/verify-backups.sh
+
+# Test restore procedure (dry run)
+./backup/scripts/verify-backups.sh --test-restore
+
+# Restore Prometheus from backup
+./backup/scripts/restore-prometheus.sh ~/GrafanaBackups/critical/critical-latest.tar.gz
+
+# Check backup container logs
+docker logs backup-critical --tail 50
+docker logs backup-bulk --tail 50
+
+# Stop backup services
+docker compose -f docker-compose.backup.yml down
 ```
 
 ## Architecture

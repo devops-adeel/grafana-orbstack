@@ -60,6 +60,7 @@ services:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
       - '--web.enable-remote-write-receiver'
+      - '--web.enable-admin-api'  # Enable snapshot API for backups
       - '--enable-feature=exemplar-storage'
       - '--storage.tsdb.retention.time=90d'
     volumes:

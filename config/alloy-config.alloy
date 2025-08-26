@@ -15,13 +15,27 @@
 //   otlp_receiver_accepted_spans - Successful trace ingestion
 //   otlp_receiver_refused_spans - Failed ingestion (check logs)
 //   otlp_receiver_accepted_metric_points - Metric ingestion rate
+//
+// AUTHENTICATION (Optional):
+// To secure OTLP endpoints with Bearer token authentication:
+// 1. Set OTLP_BEARER_TOKEN environment variable in docker-compose
+// 2. Uncomment the auth.bearer section below
+// 3. Add auth parameter to grpc and http blocks
+// 4. Configure clients with: Authorization: Bearer <token>
+//
+// otelcol.auth.bearer "otlp" {
+//   token = env("OTLP_BEARER_TOKEN")
+// }
+//
 otelcol.receiver.otlp "default" {
   grpc {
     endpoint = "0.0.0.0:4317"
+    // auth = otelcol.auth.bearer.otlp.handler  // Uncomment to enable auth
   }
 
   http {
     endpoint = "0.0.0.0:4318"
+    // auth = otelcol.auth.bearer.otlp.handler  // Uncomment to enable auth
   }
 
   output {

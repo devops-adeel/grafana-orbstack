@@ -25,7 +25,7 @@ services:
       - "3001:3000"
     environment:
       - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_SECURITY_ADMIN_PASSWORD=${GF_SECURITY_ADMIN_PASSWORD:-admin}
       # - GF_AUTH_ANONYMOUS_ENABLED=true
       # - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
       - GF_FEATURE_TOGGLES_ENABLE=traceToMetrics,traceToLogs
@@ -135,6 +135,7 @@ services:
       - --storage.path=/tmp/alloy
     environment:
       - HOSTNAME=alloy
+      - OTLP_BEARER_TOKEN=${OTLP_BEARER_TOKEN:-}
     networks:
       - observability
       - langfuse-prod_default  # Cross-network attachment for Langfuse monitoring
@@ -184,7 +185,7 @@ services:
       - dev.orbstack.domains=clickhouse-exporter.local
     environment:
       - CLICKHOUSE_USER=clickhouse
-      - CLICKHOUSE_PASSWORD=clickhouse
+      - CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD:-clickhouse}
     command:
       - -scrape_uri=http://langfuse-prod-clickhouse-1:8123/
     networks:

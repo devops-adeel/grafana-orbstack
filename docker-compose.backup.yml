@@ -1,0 +1,230 @@
+version: '3.8'
+
+# Sophisticated Backup System for Grafana Observability Stack
+# Uses offen/docker-volume-backup for industrial-grade backup management
+# 
+# Architecture:
+#   - backup-critical: Daily backups of Grafana + Prometheus (with failsafe)
+#   - backup-bulk: Weekly backups of Tempo + Loki (shorter retention)
+#   - backup-metrics: Lightweight metrics exporter for circular validation
+#
+# Usage:
+#   Start: docker compose -f docker-compose.backup.yml up -d
+#   Manual backup: docker exec backup-critical backup
+#   Verify: ./backup/scripts/verify-backups.sh
+
+services:
+  # Critical data: Grafana + Prometheus (daily backups with 30-day retention)
+  backup-critical:
+    image: offen/docker-volume-backup:v2.43.0
+    container_name: backup-critical
+    restart: unless-stopped
+    environment:
+      # Schedule and retention
+      BACKUP_FILENAME: critical-%Y-%m-%d_%H-%M-%S.tar.gz
+      BACKUP_CRON_EXPRESSION: "0 2 * * *"  # Daily at 2 AM
+      BACKUP_RETENTION_DAYS: 30
+      BACKUP_PRUNING_PREFIX: critical-
+      BACKUP_PRUNING_LEEWAY: 1h
+      
+      # Container management
+      BACKUP_STOP_DURING_BACKUP_LABEL: grafana-critical
+      BACKUP_STOP_SERVICE_TIMEOUT: 5m
+      EXEC_LABEL: prometheus-snapshot
+      EXEC_FORWARD_OUTPUT: true
+      
+      # Storage configuration
+      BACKUP_ARCHIVE: /archive
+      BACKUP_LATEST_SYMLINK: critical-latest.tar.gz
+      BACKUP_COMPRESSION: gz
+      GZIP_PARALLELISM: ${GZIP_PARALLELISM:-4}
+      
+      # Notifications
+      NOTIFICATION_LEVEL: ${NOTIFICATION_LEVEL:-error}
+      NOTIFICATION_URLS: ${NOTIFICATION_URLS:-}
+      
+      # Sources - all mounted volumes under /backup will be included by default
+      # BACKUP_SOURCES: /backup
+      
+    volumes:
+      # Backup sources (read-only)
+      - grafana-storage:/backup/grafana:ro
+      - /tmp/prometheus-snapshot:/backup/prometheus-snapshot:ro
+      - grafana-metrics:/backup/metrics:ro  # Failsafe metrics
+      
+      # Docker socket for container control
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      
+      # Local archive storage (hot tier)
+      - ${BACKUP_DIR:-${HOME}/GrafanaBackups}/critical:/archive
+      
+      # External drive mount (warm tier - optional)
+      # External drive mount (warm tier - optional)
+      # Uncomment when external drive is available:
+      # - /Volumes/${EXTERNAL_DRIVE:-SanDisk}/GrafanaBackups:/external:rw
+      
+    labels:
+      # Post-backup sync to external drive if available
+      - docker-volume-backup.archive-post=/bin/sh -c '[ -d /external ] && rsync -av --delete /archive/ /external/critical/ && echo "Synced to external drive" || echo "External drive not mounted, skipping sync"'
+      
+    networks:
+      - observability
+    
+    # Manual backup profile
+    profiles:
+      - backup
+      - critical
+
+  # Bulk data: Tempo + Loki (weekly backups with 14-day retention)
+  backup-bulk:
+    image: offen/docker-volume-backup:v2.43.0
+    container_name: backup-bulk
+    restart: unless-stopped
+    environment:
+      # Schedule and retention
+      BACKUP_FILENAME: bulk-%Y-%m-%d_%H-%M-%S.tar.zst
+      BACKUP_CRON_EXPRESSION: "0 3 * * 0"  # Sundays at 3 AM
+      BACKUP_RETENTION_DAYS: 14
+      BACKUP_PRUNING_PREFIX: bulk-
+      
+      # Container management
+      BACKUP_STOP_DURING_BACKUP_LABEL: tempo-loki
+      BACKUP_STOP_SERVICE_TIMEOUT: 3m
+      
+      # Storage configuration
+      BACKUP_ARCHIVE: /archive
+      BACKUP_LATEST_SYMLINK: bulk-latest.tar.zst
+      BACKUP_COMPRESSION: zst  # Better compression for bulk data
+      
+      # Notifications (inherit from critical)
+      NOTIFICATION_LEVEL: ${NOTIFICATION_LEVEL:-error}
+      NOTIFICATION_URLS: ${NOTIFICATION_URLS:-}
+      
+    volumes:
+      # Backup sources
+      - tempo-data:/backup/tempo:ro
+      - loki-data:/backup/loki:ro
+      
+      # Docker socket
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      
+      # Storage tiers
+      - ${BACKUP_DIR:-${HOME}/GrafanaBackups}/bulk:/archive
+      # External drive mount (warm tier - optional)
+      # Uncomment when external drive is available:
+      # - /Volumes/${EXTERNAL_DRIVE:-SanDisk}/GrafanaBackups:/external:rw
+      
+    labels:
+      # Sync to external with compression info
+      - docker-volume-backup.archive-post=/bin/sh -c '[ -d /external ] && rsync -av /archive/*.tar.zst /external/bulk/ && echo "Bulk data synced (zstd compressed)" || echo "External drive not mounted"'
+      
+    networks:
+      - observability
+    
+    profiles:
+      - backup
+      - bulk
+
+  # Failsafe metrics exporter (lightweight circular validation)
+  backup-metrics:
+    image: alpine:latest
+    container_name: backup-metrics
+    restart: unless-stopped
+    command: |
+      sh -c '
+        apk add --no-cache curl jq &&
+        while true; do
+          echo "Exporting backup metrics..."
+          
+          # Export service health
+          curl -s "http://prometheus-local:9090/api/v1/query?query=up" | \
+            jq -r ".data.result" > /metrics/service-health.json
+          
+          # Export backup timestamps
+          curl -s "http://prometheus-local:9090/api/v1/query?query=grafana_backup_last_success_timestamp" | \
+            jq -r ".data.result" > /metrics/backup-status.json
+          
+          # Export key metrics for recovery
+          curl -s "http://prometheus-local:9090/api/v1/query?query=prometheus_tsdb_symbol_table_size_bytes" | \
+            jq -r ".data.result" > /metrics/tsdb-stats.json
+          
+          # Create summary file with timestamp
+          echo "{\"exported_at\": \"$(date -Iseconds)\", \"status\": \"ok\"}" > /metrics/export-status.json
+          
+          # Sleep for 1 hour
+          sleep 3600
+        done
+      '
+    volumes:
+      - grafana-metrics:/metrics:rw
+    networks:
+      - observability
+    depends_on:
+      - backup-critical
+    profiles:
+      - backup
+      - metrics
+
+  # Manual backup trigger services (use with --profile manual)
+  backup-manual-full:
+    image: offen/docker-volume-backup:v2.43.0
+    container_name: backup-manual-full
+    profiles:
+      - manual
+    entrypoint: backup
+    environment:
+      BACKUP_FILENAME: manual-full-%Y-%m-%d_%H-%M-%S.tar.gz
+      BACKUP_ARCHIVE: /archive
+      BACKUP_STOP_DURING_BACKUP_LABEL: all
+      EXEC_LABEL: prometheus-snapshot
+      EXEC_FORWARD_OUTPUT: true
+    volumes:
+      - grafana-storage:/backup/grafana:ro
+      - prometheus-data:/backup/prometheus:ro
+      - tempo-data:/backup/tempo:ro
+      - loki-data:/backup/loki:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ${BACKUP_DIR:-${HOME}/GrafanaBackups}/manual:/archive
+
+  backup-manual-prometheus:
+    image: offen/docker-volume-backup:v2.43.0
+    container_name: backup-manual-prometheus
+    profiles:
+      - manual-prometheus
+    entrypoint: backup
+    environment:
+      BACKUP_FILENAME: manual-prometheus-%Y-%m-%d_%H-%M-%S.tar.gz
+      BACKUP_ARCHIVE: /archive
+      EXEC_LABEL: prometheus-snapshot
+      EXEC_FORWARD_OUTPUT: true
+    volumes:
+      - /tmp/prometheus-snapshot:/backup/prometheus-snapshot:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ${BACKUP_DIR:-${HOME}/GrafanaBackups}/manual:/archive
+
+networks:
+  observability:
+    external: true
+    name: observability
+
+volumes:
+  # External volumes from main stack
+  grafana-storage:
+    external: true
+    name: grafana-orbstack_grafana-storage
+    
+  prometheus-data:
+    external: true
+    name: grafana-orbstack_prometheus-data
+    
+  tempo-data:
+    external: true
+    name: grafana-orbstack_tempo-data
+    
+  loki-data:
+    external: true
+    name: grafana-orbstack_loki-data
+  
+  # Local volume for metrics export
+  grafana-metrics:
+    driver: local

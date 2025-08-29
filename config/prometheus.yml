@@ -8,7 +8,7 @@ scrape_configs:
   # Prometheus self-monitoring
   - job_name: 'prometheus'
     static_configs:
-      - targets: ['localhost:9090']
+      - targets: ['prometheus-local:9090']
 
   # Redis/FalkorDB Exporter
   - job_name: 'falkordb'

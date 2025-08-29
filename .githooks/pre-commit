@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# Pre-commit hook for secret detection using Gitleaks
+# This runs before each commit to prevent secrets from being committed
+
+set -e
+
+# Color codes for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+# Check for emergency bypass
+if [ "$SKIP_GITLEAKS" = "1" ] || [ "$SKIP_GITLEAKS" = "true" ]; then
+    echo -e "${YELLOW}⚠️  Gitleaks check bypassed (SKIP_GITLEAKS=1)${NC}"
+    exit 0
+fi
+
+# Check if gitleaks is installed
+if ! command -v gitleaks &> /dev/null; then
+    echo -e "${YELLOW}Warning: gitleaks is not installed${NC}"
+    echo "Install with: brew install gitleaks"
+    echo "Skipping secret detection..."
+    exit 0
+fi
+
+# Run gitleaks on staged files
+echo -e "${GREEN}Running Gitleaks secret detection...${NC}"
+
+# Protect against commits with secrets
+if ! gitleaks protect --staged --no-banner --config .gitleaks.toml 2>&1; then
+    echo -e "${RED}❌ Potential secrets detected!${NC}"
+    echo ""
+    echo "Options:"
+    echo "  1. Remove the secret from your code"
+    echo "  2. Use environment variable: \${VAR_NAME:-default}"
+    echo "  3. Use 1Password reference: op://HomeLab/item/field"
+    echo "  4. Add '#gitleaks:allow' comment to the line (use sparingly)"
+    echo "  5. Emergency bypass: SKIP_GITLEAKS=1 git commit"
+    echo ""
+    exit 1
+fi
+
+echo -e "${GREEN}✅ No secrets detected${NC}"
+exit 0

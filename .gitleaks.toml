@@ -1,0 +1,19 @@
+title = "Grafana Stack - Minimal Gitleaks"
+
+[extend]
+useDefault = true  # Catches AWS keys, private keys, generic secrets
+
+# Only ONE custom rule for Grafana service accounts (if you ever use them)
+[[rules]]
+id = "grafana-service-account"
+description = "Grafana Service Account Token"
+regex = '''glsa_[a-zA-Z0-9]{32,}'''
+keywords = ["glsa_"]
+
+# Simple global allowlist for YOUR patterns
+[[allowlists]]
+description = "Docker Compose env var patterns"
+regexes = [
+    '''\$\{[A-Z_]+-.*\}''',  # Any ${VAR:-default} pattern
+    '''op://''',              # 1Password references
+]

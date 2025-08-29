@@ -4,7 +4,7 @@ All notable changes to the Grafana Observability Stack for AI Agents will be doc
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-## [Unreleased]
+## [2.0.0](https://github.com/devops-adeel/grafana-orbstack/compare/v1.0.0..v2.0.0) - 2025-08-29
 
 ### 🚀 Features
 
@@ -18,10 +18,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - *(backup)* Add centralized configuration with retention policies and storage tiers
 - *(backup)* Add safe Prometheus TSDB restore script with validation
 - *(backup)* Add comprehensive backup verification and health checking
+- *(docker)* [**breaking**] Migrate to OrbStack shared network with domain-based access
+- *(dashboards)* Add FalkorDB monitoring dashboard
 
 ### 🐛 Bug Fixes
 
 - Resolve Grafana authentication and networking issues
+- *(backup)* Escape quotes in docker-volume-backup labels for Prometheus
+- *(prometheus)* Correct self-monitoring target hostname
 
 ### 🚜 Refactor
 
@@ -38,6 +42,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - *(release)* Update CHANGELOG.md for v1.0.0
 - Add Claude Code configuration for AI-assisted development
 - *(git)* Exclude backup data while preserving directory structure
+- *(release)* Update CHANGELOG.md with backup and instrumentation features
 - *(release)* Update CHANGELOG.md with backup and instrumentation features
 ## [1.0.0](https://github.com/devops-adeel/grafana-orbstack/compare/..v1.0.0) - 2025-08-22
 

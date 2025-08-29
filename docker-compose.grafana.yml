@@ -59,8 +59,8 @@ services:
     labels:
       - dev.orbstack.domains=prometheus.local
       - docker-volume-backup.exec-label=prometheus-snapshot
-      - docker-volume-backup.archive-pre=/bin/sh -c 'curl -XPOST http://localhost:9090/api/v1/admin/tsdb/snapshot 2>/dev/null | jq -r .data.name > /tmp/snapshot-name.txt && cp -r /prometheus/snapshots/$(cat /tmp/snapshot-name.txt)/* /tmp/prometheus-snapshot/ 2>/dev/null && rm -rf /prometheus/snapshots/$(cat /tmp/snapshot-name.txt) && echo "Snapshot created: $(cat /tmp/snapshot-name.txt)"'
-      - docker-volume-backup.archive-post=/bin/sh -c 'rm -rf /tmp/prometheus-snapshot/* 2>/dev/null || true'
+      - "docker-volume-backup.archive-pre=/bin/sh -c 'curl -XPOST http://localhost:9090/api/v1/admin/tsdb/snapshot 2>/dev/null | jq -r .data.name > /tmp/snapshot-name.txt && cp -r /prometheus/snapshots/$(cat /tmp/snapshot-name.txt)/* /tmp/prometheus-snapshot/ 2>/dev/null && rm -rf /prometheus/snapshots/$(cat /tmp/snapshot-name.txt) && echo \"Snapshot created: $(cat /tmp/snapshot-name.txt)\"'"
+      - "docker-volume-backup.archive-post=/bin/sh -c 'rm -rf /tmp/prometheus-snapshot/* 2>/dev/null || true'"
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'

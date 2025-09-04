@@ -25,7 +25,7 @@ tracer, meter = setup_telemetry("langfuse-example")
 
 # Initialize Langfuse
 langfuse = Langfuse(
-    host=os.getenv("LANGFUSE_HOST", "https://langfuse.local"),
+    host=os.getenv("LANGFUSE_HOST", "http://langfuse.local"),
     public_key=os.getenv("LANGFUSE_PUBLIC_KEY"),
     secret_key=os.getenv("LANGFUSE_SECRET_KEY")
 )
@@ -259,7 +259,7 @@ async def main():
     """
     print("🚀 Starting Langfuse + OpenTelemetry integration examples")
     print(f"📡 Sending traces to: {os.getenv('OTLP_ENDPOINT', 'http://alloy.local:4317')}")
-    print(f"📊 Langfuse host: {os.getenv('LANGFUSE_HOST', 'https://langfuse.local')}")
+    print(f"📊 Langfuse host: {os.getenv('LANGFUSE_HOST', 'http://langfuse.local')}")
     
     # Example 1: Enhanced search
     print("\n1. Testing enhanced search...")
@@ -296,7 +296,7 @@ async def main():
     print("\n✅ Examples complete!")
     print("\nView results:")
     print("  - Traces: http://grafana.local → Explore → Tempo")
-    print("  - Langfuse: https://langfuse.local")
+    print("  - Langfuse: http://langfuse.local")
     print("  - Metrics: http://prometheus.local")
 
 

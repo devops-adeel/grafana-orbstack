@@ -270,7 +270,7 @@ from otel_wrapper import tracer
 
 # Initialize Langfuse
 langfuse = Langfuse(
-    host="https://langfuse.local",
+    host="http://langfuse.local",
     public_key="your-key",
     secret_key="your-secret"
 )

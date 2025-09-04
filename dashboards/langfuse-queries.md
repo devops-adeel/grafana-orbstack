@@ -118,4 +118,4 @@ sum by (container_label_com_docker_compose_service)
 - Grafana: http://grafana.local (admin/admin)
 - Prometheus: http://prometheus.local
 - cAdvisor: http://cadvisor.local:8080
-- Langfuse: https://langfuse.local
+- Langfuse: http://langfuse.local

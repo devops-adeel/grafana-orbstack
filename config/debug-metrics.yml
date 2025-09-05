@@ -1,0 +1,90 @@
+# Debug Session Metrics Configuration
+# Tracks container debugging sessions initiated via docker debug
+
+# This configuration defines custom metrics for tracking debug sessions
+# To integrate with Prometheus, add a scrape job to prometheus.yml
+
+# Metric Definitions
+metrics:
+  - name: debug_sessions_total
+    type: counter
+    help: Total number of debug sessions initiated
+    labels: 
+      - container  # Container name being debugged
+      - method     # Method used (docker_debug, exec_fallback)
+      - user       # User initiating debug session
+  
+  - name: debug_session_duration_seconds
+    type: histogram
+    help: Duration of debug sessions in seconds
+    buckets: [10, 30, 60, 120, 300, 600, 1800, 3600]
+    labels:
+      - container
+      - method
+  
+  - name: debug_exec_failures_total
+    type: counter
+    help: Number of docker exec failures that triggered debug fallback
+    labels:
+      - container
+      - error_type  # not_found, no_shell, permission_denied
+  
+  - name: debug_tools_used
+    type: counter
+    help: Debugging tools used within sessions
+    labels:
+      - tool  # strace, tcpdump, htop, curl, etc.
+      - container
+
+# Prometheus Scrape Configuration
+# Add this to your prometheus.yml:
+scrape_config: |
+  - job_name: 'debug_metrics'
+    static_configs:
+      - targets: ['host.docker.internal:9091']
+    scrape_interval: 30s
+    metrics_path: /metrics
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'orbstack-debug'
+
+# Alerting Rules
+alerting_rules:
+  - alert: HighDebugSessionRate
+    expr: rate(debug_sessions_total[5m]) > 1
+    for: 5m
+    annotations:
+      summary: "High rate of debug sessions ({{ $value }} per second)"
+      description: "More than 1 debug session per second over 5 minutes may indicate systematic issues"
+  
+  - alert: LongDebugSession
+    expr: histogram_quantile(0.95, rate(debug_session_duration_seconds_bucket[5m])) > 1800
+    for: 10m
+    annotations:
+      summary: "Debug sessions taking too long"
+      description: "95th percentile of debug sessions exceeds 30 minutes"
+  
+  - alert: FrequentExecFailures
+    expr: rate(debug_exec_failures_total[10m]) > 0.5
+    for: 5m
+    annotations:
+      summary: "Frequent docker exec failures"
+      description: "Docker exec is failing frequently, indicating many distroless containers"
+
+# Grafana Dashboard Queries
+dashboard_queries:
+  debug_sessions_rate: |
+    rate(debug_sessions_total[5m])
+  
+  top_debugged_containers: |
+    topk(10, sum by(container) (debug_sessions_total))
+  
+  avg_debug_duration: |
+    histogram_quantile(0.5, rate(debug_session_duration_seconds_bucket[1h]))
+  
+  exec_failure_rate: |
+    rate(debug_exec_failures_total[5m])
+  
+  debug_methods_breakdown: |
+    sum by(method) (rate(debug_sessions_total[1h]))

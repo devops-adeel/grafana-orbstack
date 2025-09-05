@@ -51,9 +51,46 @@ otelcol.receiver.otlp "default" {
 // High volume: 500 items or 5s timeout
 otelcol.processor.batch "default" {
   output {
-    metrics = [otelcol.exporter.prometheus.default.input]
+    metrics = [otelcol.processor.attributes.genai.input]
     logs    = [otelcol.exporter.loki.default.input]
-    traces  = [otelcol.exporter.otlp.tempo.input]
+    traces  = [otelcol.processor.attributes.genai.input]
+  }
+}
+
+// Gen AI semantic convention processor
+// Enriches traces with Gen AI specific attributes and routing
+// Maps Ollama done_reason to standard finish_reasons
+otelcol.processor.attributes "genai" {
+  actions {
+    // Ensure Gen AI attributes are properly typed
+    key = "gen_ai.usage.input_tokens"
+    action = "convert"
+    converted_type = "int"
+  }
+  
+  actions {
+    key = "gen_ai.usage.output_tokens"
+    action = "convert"
+    converted_type = "int"
+  }
+  
+  actions {
+    // Calculate total tokens for cost tracking
+    key = "gen_ai.usage.total_tokens"
+    action = "insert"
+    from_attribute = "gen_ai.usage.input_tokens"
+  }
+  
+  actions {
+    // Map local model costs (inference_ms as proxy for cost)
+    key = "gen_ai.resource.local_cost"
+    action = "insert"
+    from_attribute = "gen_ai.resource.inference_ms"
+  }
+  
+  output {
+    metrics = [otelcol.exporter.prometheus.default.input, otelcol.exporter.otlphttp.langfuse.input]
+    traces  = [otelcol.exporter.otlp.tempo.input, otelcol.exporter.otlphttp.langfuse.input]
   }
 }
 
@@ -75,6 +112,24 @@ otelcol.exporter.otlp "tempo" {
 // Export logs to Loki
 otelcol.exporter.loki "default" {
   forward_to = [loki.write.default.receiver]
+}
+
+// Export to Langfuse OTLP endpoint for LLM-specific observability
+// Langfuse provides native LLM UI for traces while we keep infrastructure metrics
+// AUTH: Requires LANGFUSE_AUTH_BASE64 environment variable
+// Format: echo -n "pk-lf-xxx:sk-lf-xxx" | base64
+otelcol.exporter.otlphttp "langfuse" {
+  client {
+    endpoint = env("LANGFUSE_OTLP_ENDPOINT") | "http://langfuse.local:3000/api/public/otel"
+    
+    headers = {
+      "Authorization" = "Basic " + (env("LANGFUSE_AUTH_BASE64") | "")
+    }
+    
+    tls {
+      insecure = true
+    }
+  }
 }
 
 // Prometheus remote write to local Prometheus

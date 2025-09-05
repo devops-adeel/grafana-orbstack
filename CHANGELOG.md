@@ -4,6 +4,18 @@ All notable changes to the Grafana Observability Stack for AI Agents will be doc
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+## [Unreleased]
+
+### 🚀 Features
+
+- *(otel)* Add OpenTelemetry Gen AI semantic conventions setup
+- *(instrumentation)* Add local model cost tracker for resource monitoring
+- *(alloy)* Configure dual routing to Langfuse and Tempo with Gen AI processor
+- *(dashboards)* Add Graphiti dual observability dashboard and debug metrics
+
+### 🐛 Bug Fixes
+
+- *(orbstack)* Replace HTTPS with HTTP for all local domains
 ## [2.1.0](https://github.com/devops-adeel/grafana-orbstack/compare/v1.0.0..v2.1.0) - 2025-08-29
 
 ### 🚀 Features
